@@ -1,0 +1,77 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKERHUB_USER = "psmdocker123"
+        DOCKERHUB_CREDENTIALS = "dockerhub-cred-id"   // Jenkins credential ID
+        K8S_NAMESPACE = "lxp"
+    }
+
+    stages {
+
+        stage('Checkout Code') {
+            steps {
+                git branch: 'master',
+                    url: 'https://github.com/girisettyramakrishna/LXP_fullstack.git'
+            }
+        }
+
+        stage('Build Frontend Image') {
+            steps {
+                script {
+                    sh """
+                        docker build -t ${DOCKERHUB_USER}/frontend_app:latest ./frontend
+                    """
+                }
+            }
+        }
+
+        stage('Build Backend Image') {
+            steps {
+                script {
+                    sh """
+                        docker build -t ${DOCKERHUB_USER}/backend_app:latest ./backend
+                    """
+                }
+            }
+        }
+
+        stage('DockerHub Login & Push') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(
+                        credentialsId: "${DOCKERHUB_CREDENTIALS}",
+                        usernameVariable: 'USER',
+                        passwordVariable: 'PASSWORD'
+                    )]) {
+                        sh """
+                            docker login -u $USER -p $PASSWORD
+                            docker push ${DOCKERHUB_USER}/frontend_app:latest
+                            docker push ${DOCKERHUB_USER}/backend_app:latest
+                        """
+                    }
+                }
+            }
+        }
+
+        stage("Deploy to Kubernetes") {
+            steps {
+                script {
+                    sh """
+                        kubectl apply -f lxp-ful-setup.yaml
+                    """
+                }
+            }
+        }
+
+    }
+
+    post {
+        success {
+            echo "🎉 Deployment Successful!"
+        }
+        failure {
+            echo "❌ Deployment Failed!"
+        }
+    }
+}
